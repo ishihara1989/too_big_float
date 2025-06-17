@@ -60,7 +60,7 @@ too_big_float = { path = "../path/to/too_big_float" }
 Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
-too_big_float = { git = "https://github.com/your-username/too_big_float.git" }
+too_big_float = { git = "https://github.com/ishihara1989/too_big_float.git" }
 ```
 
 ## Usage Examples
