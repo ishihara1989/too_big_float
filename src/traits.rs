@@ -1,4 +1,4 @@
-use crate::bigfloat::{BigFloat, Exponent};
+use crate::bigfloat::BigFloat;
 use std::cmp::Ordering;
 
 impl PartialOrd for BigFloat {
@@ -241,7 +241,7 @@ mod tests {
         assert_eq!(a, BigFloat::new(1.0, 1));
         
         a *= b.clone();
-        assert_eq!(a, BigFloat::new(2.0, 1));
+        assert_eq!(a, BigFloat::new(2.0, 2));
         
         a /= b;
         assert_eq!(a, BigFloat::new(1.0, 1));

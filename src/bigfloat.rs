@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub struct BigFloat {
-    mantissa: f64,
-    exponent: Exponent,
+    pub mantissa: f64,
+    pub exponent: Exponent,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,7 +73,7 @@ impl BigFloat {
                     *exp = new_exp;
                 } else {
                     let big_exp = BigFloat::new(*exp as f64, 0);
-                    let big_adj = BigFloat::new(adjustment as f64, 0);
+                    let _big_adj = BigFloat::new(adjustment as f64, 0);
                     // TODO: Implement addition for BigFloat
                     self.exponent = Exponent::BigFloat(Box::new(big_exp));
                 }

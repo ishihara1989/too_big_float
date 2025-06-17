@@ -101,7 +101,7 @@ impl BigFloat {
         }
     }
 
-    fn compare_exponents(&self, other: &BigFloat) -> std::cmp::Ordering {
+    pub fn compare_exponents(&self, other: &BigFloat) -> std::cmp::Ordering {
         match (&self.exponent, &other.exponent) {
             (Exponent::Long(a), Exponent::Long(b)) => a.cmp(b),
             (Exponent::Long(_), Exponent::BigFloat(_)) => std::cmp::Ordering::Less,
