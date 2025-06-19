@@ -1,4 +1,4 @@
-use crate::bigfloat::{BigFloat, Exponent};
+use crate::bigfloat::BigFloat;
 
 impl BigFloat {
     pub fn ln(&self) -> BigFloat {
@@ -16,20 +16,9 @@ impl BigFloat {
 
         let mantissa_ln = self.mantissa.ln();
         
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                // ln(mantissa * 10^exp) = ln(mantissa) + exp * ln(10)
-                let exp_term = (*exp as f64) * 10.0_f64.ln();
-                BigFloat::from_f64(mantissa_ln + exp_term)
-            }
-            Exponent::BigFloat(big_exp) => {
-                // For very large exponents, exp * ln(10) dominates
-                let ln_10 = BigFloat::from_f64(10.0_f64.ln());
-                let exp_term = (**big_exp).clone() * ln_10;
-                let mantissa_term = BigFloat::from_f64(mantissa_ln);
-                exp_term + mantissa_term
-            }
-        }
+        // ln(mantissa * 10^exp) = ln(mantissa) + exp * ln(10)
+        let exp_term = (self.exponent as f64) * 10.0_f64.ln();
+        BigFloat::from_f64(mantissa_ln + exp_term)
     }
 
     pub fn log10(&self) -> BigFloat {
@@ -47,16 +36,8 @@ impl BigFloat {
 
         let mantissa_log10 = self.mantissa.log10();
         
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                // log10(mantissa * 10^exp) = log10(mantissa) + exp
-                BigFloat::from_f64(mantissa_log10 + (*exp as f64))
-            }
-            Exponent::BigFloat(big_exp) => {
-                let mantissa_term = BigFloat::from_f64(mantissa_log10);
-                (**big_exp).clone() + mantissa_term
-            }
-        }
+        // log10(mantissa * 10^exp) = log10(mantissa) + exp
+        BigFloat::from_f64(mantissa_log10 + (self.exponent as f64))
     }
 
     pub fn exp(&self) -> BigFloat {
@@ -64,30 +45,24 @@ impl BigFloat {
             return BigFloat::from_f64(self.mantissa.exp());
         }
 
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                if *exp < 0 {
-                    // Very small number, exp() will be close to 1
-                    return BigFloat::from_f64(1.0);
-                }
-                
-                if *exp > 2 {
-                    // Very large number, result will be infinity
-                    return BigFloat::from_f64(f64::INFINITY);
-                }
-                
-                // For moderate exponents, convert to f64 and use standard exp
-                let as_f64 = self.to_f64_lossy();
-                if as_f64.is_finite() {
-                    BigFloat::from_f64(as_f64.exp())
-                } else {
-                    BigFloat::from_f64(f64::INFINITY)
-                }
-            }
-            Exponent::BigFloat(_) => {
-                // For BigFloat exponents, result is essentially infinity
-                BigFloat::from_f64(f64::INFINITY)
-            }
+        let exp_f64 = self.exponent as f64;
+        
+        if exp_f64 < 0.0 {
+            // Very small number, exp() will be close to 1
+            return BigFloat::from_f64(1.0);
+        }
+        
+        if exp_f64 > 2.0 {
+            // Very large number, result will be infinity
+            return BigFloat::from_f64(f64::INFINITY);
+        }
+        
+        // For moderate exponents, convert to f64 and use standard exp
+        let as_f64 = self.to_f64_lossy();
+        if as_f64.is_finite() {
+            BigFloat::from_f64(as_f64.exp())
+        } else {
+            BigFloat::from_f64(f64::INFINITY)
         }
     }
 
@@ -159,24 +134,10 @@ impl BigFloat {
     }
 
     fn to_f64_lossy(&self) -> f64 {
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                if *exp > 308 {
-                    f64::INFINITY
-                } else if *exp < -308 {
-                    0.0
-                } else {
-                    self.mantissa * 10.0_f64.powi(*exp as i32)
-                }
-            }
-            Exponent::BigFloat(_) => {
-                // For BigFloat exponents, assume very large
-                if self.mantissa > 0.0 {
-                    f64::INFINITY
-                } else {
-                    f64::NEG_INFINITY
-                }
-            }
+        if self.exponent > 308 {
+            if self.mantissa >= 0.0 { f64::INFINITY } else { f64::NEG_INFINITY }
+        } else {
+            self.mantissa * 10.0_f64.powi(self.exponent as i32)
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::bigfloat::{BigFloat, Exponent};
+use crate::bigfloat::BigFloat;
 use std::fmt;
 use std::str::FromStr;
 
@@ -16,21 +16,16 @@ impl fmt::Display for BigFloat {
             return write!(f, "0");
         }
 
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                if *exp >= -4 && *exp <= 6 {
-                    // Use standard notation for reasonable-sized numbers
-                    let value = self.mantissa * 10.0_f64.powi(*exp as i32);
-                    write!(f, "{}", value)
-                } else {
-                    // Use scientific notation
-                    write!(f, "{}e{}", self.mantissa, exp)
-                }
-            }
-            Exponent::BigFloat(big_exp) => {
-                // For very large exponents, show as mantissa * 10^(big_exponent)
-                write!(f, "{} × 10^({})", self.mantissa, big_exp)
-            }
+        if self.exponent == 0 {
+            // For exponent 0, just show the mantissa
+            write!(f, "{}", self.mantissa)
+        } else if self.exponent <= 6 {
+            // Use standard notation for small exponents
+            let value = self.mantissa * 10.0_f64.powi(self.exponent as i32);
+            write!(f, "{}", value)
+        } else {
+            // Use scientific notation for large exponents
+            write!(f, "{}e{}", self.mantissa, self.exponent)
         }
     }
 }
@@ -67,41 +62,20 @@ impl FromStr for BigFloat {
             let mantissa: f64 = mantissa_str.parse()
                 .map_err(|_| format!("Invalid mantissa: {}", mantissa_str))?;
             
-            // Try to parse exponent as i64 first
-            if let Ok(exp) = exp_str.parse::<i64>() {
+            // Try to parse exponent as u128
+            if let Ok(exp) = exp_str.parse::<u128>() {
                 return Ok(BigFloat::new(mantissa, exp));
             }
             
-            // If that fails, try to parse as BigFloat
-            if let Ok(exp_bigfloat) = exp_str.parse::<BigFloat>() {
-                return Ok(BigFloat {
-                    mantissa,
-                    exponent: Exponent::BigFloat(Box::new(exp_bigfloat)),
-                });
+            // If that fails, try as i64 and convert using the helper method
+            if let Ok(exp) = exp_str.parse::<i64>() {
+                return Ok(BigFloat::new_from_i64_exponent(mantissa, exp));
             }
+            
             
             return Err(format!("Invalid exponent: {}", exp_str));
         }
 
-        // Handle notation like "1e1e100" (nested exponentials)
-        if s.matches('e').count() >= 2 {
-            // Find the first 'e'
-            if let Some(first_e) = s.find('e') {
-                let (mantissa_str, rest) = s.split_at(first_e);
-                let exp_str = &rest[1..]; // Remove first 'e'
-                
-                let mantissa: f64 = mantissa_str.parse()
-                    .map_err(|_| format!("Invalid mantissa: {}", mantissa_str))?;
-                
-                // Parse the rest as a BigFloat (recursive)
-                let exp_bigfloat = exp_str.parse::<BigFloat>()?;
-                
-                return Ok(BigFloat {
-                    mantissa,
-                    exponent: Exponent::BigFloat(Box::new(exp_bigfloat)),
-                });
-            }
-        }
 
         Err(format!("Unable to parse: {}", s))
     }
@@ -133,32 +107,18 @@ impl From<i64> for BigFloat {
 
 impl BigFloat {
     pub fn to_f64(&self) -> Option<f64> {
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                if *exp > 308 || *exp < -324 {
-                    None // Out of f64 range
-                } else {
-                    Some(self.mantissa * 10.0_f64.powi(*exp as i32))
-                }
-            }
-            Exponent::BigFloat(_) => None, // Cannot represent in f64
+        if self.exponent > 308 {
+            None // Out of f64 range
+        } else {
+            Some(self.mantissa * 10.0_f64.powi(self.exponent as i32))
         }
     }
 
     pub fn to_f64_saturating(&self) -> f64 {
-        match &self.exponent {
-            Exponent::Long(exp) => {
-                if *exp > 308 {
-                    if self.mantissa >= 0.0 { f64::INFINITY } else { f64::NEG_INFINITY }
-                } else if *exp < -324 {
-                    0.0
-                } else {
-                    self.mantissa * 10.0_f64.powi(*exp as i32)
-                }
-            }
-            Exponent::BigFloat(_) => {
-                if self.mantissa >= 0.0 { f64::INFINITY } else { f64::NEG_INFINITY }
-            }
+        if self.exponent > 308 {
+            if self.mantissa >= 0.0 { f64::INFINITY } else { f64::NEG_INFINITY }
+        } else {
+            self.mantissa * 10.0_f64.powi(self.exponent as i32)
         }
     }
 }
@@ -179,42 +139,21 @@ mod tests {
         assert_eq!(format!("{}", bf), "1.23e10");
     }
 
-    #[test]
-    fn test_display_very_large() {
-        let large_exp = BigFloat::new(1.0, 100);
-        let bf = BigFloat {
-            mantissa: 1.23,
-            exponent: Exponent::BigFloat(Box::new(large_exp)),
-        };
-        assert!(format!("{}", bf).contains("1.23 × 10^"));
-    }
 
     #[test]
     fn test_parse_basic() {
         let bf: BigFloat = "123.45".parse().unwrap();
         assert!((bf.mantissa() - 1.2345).abs() < 1e-10);
-        assert_eq!(bf.exponent(), &Exponent::Long(2));
+        assert_eq!(bf.exponent(), 2);
     }
 
     #[test]
     fn test_parse_scientific() {
         let bf: BigFloat = "1.23e10".parse().unwrap();
         assert!((bf.mantissa() - 1.23).abs() < 1e-10);
-        assert_eq!(bf.exponent(), &Exponent::Long(10));
+        assert_eq!(bf.exponent(), 10);
     }
 
-    #[test]
-    fn test_parse_nested_exponential() {
-        let bf: BigFloat = "1e1e10".parse().unwrap();
-        assert!((bf.mantissa() - 1.0).abs() < 1e-10);
-        match bf.exponent() {
-            Exponent::BigFloat(exp) => {
-                assert!((exp.mantissa() - 1.0).abs() < 1e-10);
-                assert_eq!(exp.exponent(), &Exponent::Long(10));
-            }
-            _ => panic!("Expected BigFloat exponent"),
-        }
-    }
 
     #[test]
     fn test_parse_special_values() {
@@ -241,5 +180,17 @@ mod tests {
         let large = BigFloat::new(1.0, 1000);
         assert!(large.to_f64().is_none());
         assert_eq!(large.to_f64_saturating(), f64::INFINITY);
+    }
+
+    #[test]
+    fn test_small_fraction_display() {
+        let bf = BigFloat::new(0.123, 0);
+        assert_eq!(format!("{}", bf), "0.123");
+    }
+
+    #[test]
+    fn test_large_exponent_display() {
+        let bf = BigFloat::new(1.23, 15);
+        assert_eq!(format!("{}", bf), "1.23e15");
     }
 }
